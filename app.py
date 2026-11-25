@@ -75,7 +75,7 @@ NEW_MATCH_DELAY = float(os.environ.get("NEW_MATCH_DELAY", "7"))
 # ✅ BAN-SAFE: 1 ID = 1 match — parallel match সবচেয়ে বড় ban trigger
 # Real player কখনো একসাথে একাধিক match খেলতে পারে না → server এটা detect করে ban করে
 MAX_PARALLEL_MATCHES = int(os.environ.get("MAX_PARALLEL_MATCHES", "1"))     # ✅ FIX: 2→1 — 1 ID = 1 match, server detect করে ban দেয়
-BR_MAX_PARALLEL = int(os.environ.get("BR_MAX_PARALLEL", "1"))               # BR: max 1 (server-এ একটাই BR session)
+BR_MAX_PARALLEL = int(os.environ.get("BR_MAX_PARALLEL", "10"))              # BR-EVO: max concurrent in-match (web shows count)
 
 MAX_MATCH_DURATION = 700
 MATCH_IDLE_TIMEOUT = float(os.environ.get("MATCH_IDLE_TIMEOUT", "18.0"))
@@ -440,7 +440,7 @@ class ProxyPool:
     def _make_client(self, proxy_url):
         kwargs = dict(
             verify   = False,
-            timeout  = 12.0,
+            timeout  = httpx.Timeout(connect=12.0, read=25.0, write=12.0, pool=12.0),
             limits   = httpx.Limits(
                 max_connections            = 200,
                 max_keepalive_connections  = 50,
@@ -1377,7 +1377,9 @@ async def send_majorlogin(data, release_version, server_url):
         req_headers["ReleaseVersion"] = release_version
         req_headers["Host"] = "loginbp.ppmainecoonghj.com"  # ✅ ADDED: real client Host header
         # ✅ Direct connection — free proxy 400 error দেয়, তাই proxy ছাড়াই login
-        response = await client.post(url, headers=req_headers, data=data)
+        # Longer timeout under concurrent logins
+        _t = httpx.Timeout(connect=15.0, read=30.0, write=15.0, pool=15.0)
+        response = await client.post(url, headers=req_headers, data=data, timeout=_t)
         if response.status_code != 200:
             report_fail(None, f"MajorLogin HTTP {response.status_code}", f"url={url} body={response.text[:150]}")
             return None
@@ -1459,50 +1461,71 @@ async def send_majorlogin(data, release_version, server_url):
         return None
 
 async def send_getlogin(data, base_url, token, release_version):
-    try:
-        url = f"{base_url.rstrip('/')}/GetLoginData"
-        req_headers = headers.copy()
-        req_headers["ReleaseVersion"] = release_version
-        req_headers['Authorization'] = f"Bearer {token}"
-        req_headers['Host'] = "loginbp.ppmainecoonghj.com"  # ✅ FIXED: real client uses loginbp (captured from OB55)
-        # ✅ Direct connection — proxy ছাড়াই GetLoginData
-        response = await client.post(url, headers=req_headers, data=data)
-        if response.status_code != 200:
-            report_fail(None, f"GetLoginData HTTP {response.status_code}", f"url={url} body={response.text[:150]}")
+    """GetLoginData with retries — ConnectTimeout/ReadTimeout common under load."""
+    url = f"{base_url.rstrip('/')}/GetLoginData"
+    req_headers = headers.copy()
+    req_headers["ReleaseVersion"] = release_version
+    req_headers["Authorization"] = f"Bearer {token}"
+    req_headers["Host"] = "loginbp.ppmainecoonghj.com"
+    # Longer timeout for loginbp under concurrency (default client is 12s)
+    _t = httpx.Timeout(connect=15.0, read=35.0, write=15.0, pool=15.0)
+    last_err = ""
+    for attempt in range(4):
+        try:
+            response = await client.post(url, headers=req_headers, data=data, timeout=_t)
+            if response.status_code != 200:
+                last_err = f"HTTP {response.status_code} body={response.text[:120]}"
+                # 429/5xx → backoff and retry
+                if response.status_code in (429, 500, 502, 503, 504) and attempt < 3:
+                    await asyncio.sleep(1.5 * (attempt + 1) + random.uniform(0.3, 1.0))
+                    continue
+                report_fail(None, f"GetLoginData HTTP {response.status_code}", f"url={url} body={response.text[:150]}")
+                return None
+            response_content = response.content
+
+            res_proto = thunderFF_pb2.GetLoginDataRes()
+            parsed_successfully = False
+            try:
+                res_proto.ParseFromString(response_content)
+                if res_proto.functional_addrs or res_proto.informational_addrs:
+                    parsed_successfully = True
+            except Exception:
+                pass
+
+            if not parsed_successfully:
+                for offset in range(min(128, len(response_content))):
+                    try:
+                        candidate = thunderFF_pb2.GetLoginDataRes()
+                        candidate.ParseFromString(response_content[offset:])
+                        if candidate.functional_addrs or candidate.informational_addrs:
+                            res_proto = candidate
+                            break
+                    except Exception:
+                        pass
+
+            dict_res = {}
+            try:
+                parsed = Parser().parse(response_content.hex())
+                dict_res = await parse_results(parsed)
+            except Exception:
+                pass
+
+            return res_proto, dict_res
+        except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.PoolTimeout, httpx.ConnectError, httpx.RemoteProtocolError) as e:
+            last_err = repr(e)[:160]
+            if attempt < 3:
+                wait = 1.2 * (attempt + 1) + random.uniform(0.4, 1.5)
+                print_warning(f"[GetLoginData] {type(e).__name__} attempt {attempt+1}/4 — retry in {wait:.1f}s")
+                await asyncio.sleep(wait)
+                continue
+            report_fail(None, "GetLoginData exception", last_err)
             return None
-        response_content = response.content
-
-        res_proto = thunderFF_pb2.GetLoginDataRes()
-        parsed_successfully = False
-        try:
-            res_proto.ParseFromString(response_content)
-            if res_proto.functional_addrs or res_proto.informational_addrs:
-                parsed_successfully = True
-        except Exception:
-            pass
-
-        if not parsed_successfully:
-            for offset in range(min(128, len(response_content))):
-                try:
-                    candidate = thunderFF_pb2.GetLoginDataRes()
-                    candidate.ParseFromString(response_content[offset:])
-                    if candidate.functional_addrs or candidate.informational_addrs:
-                        res_proto = candidate
-                        break
-                except Exception:
-                    pass
-
-        dict_res = {}
-        try:
-            parsed = Parser().parse(response_content.hex())
-            dict_res = await parse_results(parsed)
-        except Exception:
-            pass
-
-        return res_proto, dict_res
-    except Exception as e:
-        report_fail(None, "GetLoginData exception", repr(e)[:200])
-        return None
+        except Exception as e:
+            last_err = repr(e)[:200]
+            report_fail(None, "GetLoginData exception", last_err)
+            return None
+    report_fail(None, "GetLoginData exception", last_err or "exhausted retries")
+    return None
 
 async def build_tcp_startup_packet(account_id, token, server_time, key, iv, region=DEFAULT_REGION, typ='OnLine'):
     uid_hex = f"{int(account_id):016x}"
@@ -4185,11 +4208,11 @@ def bre_build_auth_packet(account_id, jwt_token, timestamp, key, iv):
 async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
                              region, game_version, max_reconnects=15, stronghold=""):
     """
-    ✅ DASHBOARD BEAR EVO — BR Evolution Mode Worker (EXP FIX)
-    লুপ: exit_team → create_br_evo_team → start_br_evo → (সার্ভার MATCH FOUND পাঠায়)
-         → UDP গেম-সার্ভারে HELLO/447/448 দিয়ে সত্যিকারের ম্যাচে জয়েন → ম্যাচ শেষ → repeat
-
-    আগের ভার্সন সার্ভারের প্যাকেট পড়ে ফেলে দিত এবং আসলে ম্যাচে ঢুকত না, তাই EXP আসত না।
+    ✅ DASHBOARD BEAR EVO — BR Evolution Mode Worker
+    MATCH FOUND → start UDP join → 3s later close TCP only (UDP keeps running)
+    → reconnect TCP → search next match again.
+    Max concurrent live UDP matches: BR_MAX_PARALLEL (default 10).
+    Web shows live in-match count via update_status(..., active).
     """
     reconnects = 0
     ip, port = addrs.split(":")
@@ -4197,35 +4220,68 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
     loop_count = 0
     write_lock = asyncio.Lock()
     debug = os.environ.get("BR_EVO_DEBUG", "0") == "1"
+    # UDP sessions survive across TCP reconnects — never cancelled on TCP close
+    live_udp_tasks = set()
+    TCP_CLOSE_AFTER_MATCH_SEC = 3.0
+    MAX_LIVE = max(1, int(BR_MAX_PARALLEL) if BR_MAX_PARALLEL else 10)
 
     def _blog(msg, level="info"):
         bot_state.log(f"[🐻 BR-EVO] {msg}", level)
+
+    def _live_count() -> int:
+        return len([t for t in live_udp_tasks if not t.done()])
+
+    def _prune_udp():
+        done = {t for t in live_udp_tasks if t.done()}
+        live_udp_tasks.difference_update(done)
+
+    async def _push_status(status: str):
+        """Push status + live in-match count to dashboard web."""
+        try:
+            n = _live_count()
+            bot_state.update_status(uid_str, status, n)
+            bot_state.set_info(uid_str, f"🐻 In-Match: {n}/{MAX_LIVE} | {status}")
+        except Exception:
+            pass
+
+    async def _run_udp(decoded, match_id):
+        """UDP match session — independent of TCP lifetime. Counts toward live max."""
+        st = {}
+        try:
+            # active slot already reserved before task create
+            await _push_status("IN_MATCH")
+            await br_evo_game.play_br_evo_match(
+                decoded, region, game_version, stronghold, log=_blog, state=st
+            )
+        finally:
+            try:
+                await _dec_match(uid_str)
+            except Exception:
+                pass
+            if st.get("joined"):
+                try:
+                    bot_state.increment_match(uid_str)
+                except Exception:
+                    pass
+                try:
+                    asyncio.create_task(refresh_account_profile(uid_str))
+                except Exception:
+                    pass
+            _blog(
+                f"[UDP] session ended | match {match_id} | UID {uid_str} | live {_live_count()}/{MAX_LIVE}",
+                "info",
+            )
+            await _push_status("IN_MATCH" if _live_count() > 0 else "SEARCHING")
 
     while True:
         writer = None
         hb_task = None
         evo_task = None
-        udp_task = None
-        current_match = None          # যে match_id-তে এখন UDP সেশন চলছে
+        reader = None
+        current_match = None
         seen_ops = set()
-
-        async def _run_udp(decoded):
-            """একটা MATCH FOUND-এর জন্য UDP সেশন; সত্যিকারের জয়েন হলে তবেই ম্যাচ কাউন্ট বাড়ে"""
-            st = {}
-            try:
-                await br_evo_game.play_br_evo_match(
-                    decoded, region, game_version, stronghold, log=_blog, state=st
-                )
-            finally:
-                if st.get("joined"):
-                    try:
-                        bot_state.increment_match(uid_str)
-                    except Exception:
-                        pass
-                    try:
-                        asyncio.create_task(refresh_account_profile(uid_str))
-                    except Exception:
-                        pass
+        match_found_this_session = False
+        close_tcp_after_match = False
 
         try:
             resolved_ip = await resolve_host_cloudflare(ip)
@@ -4237,15 +4293,13 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
             except asyncio.TimeoutError:
                 raise ConnectionError("BR-EVO TCP timeout")
 
-            raw_sock = writer.get_extra_info('socket')
+            raw_sock = writer.get_extra_info("socket")
             if raw_sock:
                 optimize_tcp_socket(raw_sock)
 
-            # ✅ Auth packet পাঠাও
             writer.write(bytes.fromhex(auth_packet))
             await asyncio.wait_for(writer.drain(), timeout=5.0)
 
-            # ✅ Initial keepalive
             try:
                 writer.write(bytes.fromhex("0219"))
                 await asyncio.wait_for(writer.drain(), timeout=3)
@@ -4253,10 +4307,10 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
                 pass
 
             bot_state.log(f"[🐻 BR-EVO] Connected | UID: {uid_str} | {resolved_ip}:{port}", "success")
-            bot_state.update_status(uid_str, "ONLINE")
             reconnects = 0
+            _prune_udp()
+            await _push_status("ONLINE" if _live_count() == 0 else "IN_MATCH")
 
-            # ── Heartbeat (প্রতি ১০s keepalive পাঠায়)
             async def heartbeat():
                 while True:
                     await asyncio.sleep(10)
@@ -4268,18 +4322,28 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
                     except Exception:
                         break
 
-            # ── BR Evolution loop (মূল কাজ)
             async def br_evo_loop():
                 nonlocal loop_count
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
                 while True:
                     try:
                         if writer is None or writer.is_closing():
                             break
-                        loop_count += 1
 
-                        # ✅ FIX: SEARCHING দেখাও, loop_count নয় (loop_count = মোট রাউন্ড, active match নয়)
-                        bot_state.update_status(uid_str, "SEARCHING", 0)
+                        # Cap: if already at max live matches, wait until a slot frees
+                        while _live_count() >= MAX_LIVE:
+                            await _push_status("IN_MATCH")
+                            bot_state.set_info(
+                                uid_str,
+                                f"🐻 Max in-match {MAX_LIVE}/{MAX_LIVE} — waiting free slot..."
+                            )
+                            await asyncio.sleep(1.0)
+                            if writer is None or writer.is_closing():
+                                return
+                            _prune_udp()
+
+                        loop_count += 1
+                        await _push_status("SEARCHING")
 
                         # ① Exit team
                         pkt = bre_exit_team(account_id, key, iv)
@@ -4306,57 +4370,34 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
                         async with write_lock:
                             writer.write(pkt)
                             await writer.drain()
-                        bot_state.log(f"[🐻 BR-EVO #{loop_count}] Match START sent | UID: {uid_str}", "info")
-                        bot_state.set_info(uid_str, f"🐻 BR EVO #{loop_count} — ম্যাচ খুঁজছে...")
+                        bot_state.log(
+                            f"[🐻 BR-EVO #{loop_count}] Match START sent | UID: {uid_str} | live {_live_count()}/{MAX_LIVE}",
+                            "info",
+                        )
+                        bot_state.set_info(
+                            uid_str,
+                            f"🐻 BR EVO #{loop_count} — searching... | In-Match {_live_count()}/{MAX_LIVE}",
+                        )
 
-                        # ✅ FIX: পুরনো code 90s blindly sleep → প্রতি 90s এ নতুন start পাঠাত
-                        # (ফলে active games বাড়ত, server confused হত, EXP আসত না)
-                        # নতুন: MATCH FOUND (udp_task তৈরি) পর্যন্ত অপেক্ষা করো,
-                        #        তারপর সেই match সম্পূর্ণ শেষ হওয়া পর্যন্ত অপেক্ষা করো,
-                        #        তবেই পরের match start পাঠাও → 1 ID = 1 match at a time
-
-                        task_before = udp_task  # এই search শুরুর আগের task snapshot
-
-                        # সর্বোচ্চ 120s MATCH FOUND এর জন্য অপেক্ষা
+                        # Wait for MATCH FOUND (TCP closes 3s after join). Do not wait full UDP end.
                         search_deadline = asyncio.get_event_loop().time() + 120
-                        matched_task = None
                         while asyncio.get_event_loop().time() < search_deadline:
-                            cur = udp_task  # closure থেকে latest value
-                            if cur is not None and cur is not task_before and not cur.done():
-                                matched_task = cur
+                            if match_found_this_session or (writer is None or writer.is_closing()):
                                 break
-                            await asyncio.sleep(0.5)
+                            await asyncio.sleep(0.4)
 
-                        if matched_task is None:
-                            # 120s এও match আসেনি → retry
+                        if not match_found_this_session:
+                            if writer is None or writer.is_closing():
+                                break
                             bot_state.log(
                                 f"[🐻 BR-EVO #{loop_count}] MATCH FOUND নেই (120s) — retry | UID: {uid_str}",
-                                "info"
+                                "info",
                             )
                             await asyncio.sleep(3)
                             continue
 
-                        # ✅ ম্যাচ পাওয়া গেছে — শেষ হওয়া পর্যন্ত অপেক্ষা (active = 1)
-                        bot_state.update_status(uid_str, "IN_MATCH", 1)
-                        bot_state.set_info(uid_str, f"🐻 BR EVO Match #{loop_count} চলছে...")
-
-                        # asyncio.wait: task cancel/fail/complete যেকোনোভাবে শেষ হলেই ফিরবে
-                        try:
-                            await asyncio.wait({matched_task}, timeout=700)
-                        except asyncio.CancelledError:
-                            raise
-                        except Exception:
-                            pass
-
-                        # ✅ ম্যাচ শেষ — EXP refresh, status reset, তারপর পরের ম্যাচ
-                        bot_state.update_status(uid_str, "ONLINE", 0)
-                        try:
-                            asyncio.create_task(refresh_account_profile(uid_str))
-                        except Exception:
-                            pass
-
-                        # পরের ম্যাচের আগে ছোট বিরতি (server-side lobby cooldown)
-                        await asyncio.sleep(random.uniform(5, 10))
+                        # Match found; read loop closes TCP after 3s. Stop search until reconnect.
+                        break
 
                     except asyncio.CancelledError:
                         raise
@@ -4364,13 +4405,20 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
                         bot_state.log(f"[🐻 BR-EVO] Loop error: {e}", "error")
                         await asyncio.sleep(5)
 
-            hb_task  = asyncio.create_task(heartbeat())
+            hb_task = asyncio.create_task(heartbeat())
             evo_task = asyncio.create_task(br_evo_loop())
 
-            # ── TCP read loop: সার্ভারের প্যাকেট ধরে MATCH FOUND (0300, type 5) এলে UDP-তে জয়েন
+            # ── TCP read loop
             idle_count = 0
             buf = b""
             while True:
+                if close_tcp_after_match:
+                    _blog(
+                        f"MATCH FOUND + {TCP_CLOSE_AFTER_MATCH_SEC}s → closing TCP only | UID: {uid_str} | live {_live_count()}/{MAX_LIVE}",
+                        "info",
+                    )
+                    break
+
                 try:
                     data = await asyncio.wait_for(reader.read(65536), timeout=30.0)
                     if not data:
@@ -4378,14 +4426,17 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
                     idle_count = 0
                 except asyncio.TimeoutError:
                     idle_count += 1
-                    if idle_count > 10:   # 300s silent → reconnect
+                    if idle_count > 10:
                         raise ConnectionError("BR-EVO gateway idle timeout")
                     continue
 
                 buf += data
                 frames, buf, desync = br_evo_game.split_tcp_frames(buf)
                 if desync:
-                    bot_state.log(f"[🐻 BR-EVO] TCP stream desync — reconnecting | UID: {uid_str}", "warning")
+                    bot_state.log(
+                        f"[🐻 BR-EVO] TCP stream desync — reconnecting | UID: {uid_str}",
+                        "warning",
+                    )
                     raise ConnectionError("TCP stream desync")
 
                 for frame in frames:
@@ -4393,7 +4444,10 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
                         op = frame[:2].hex()
                         if op not in seen_ops:
                             seen_ops.add(op)
-                            bot_state.log(f"[🐻 BR-EVO][DEBUG] new opcode {op} len={len(frame)} | UID: {uid_str}", "info")
+                            bot_state.log(
+                                f"[🐻 BR-EVO][DEBUG] new opcode {op} len={len(frame)} | UID: {uid_str}",
+                                "info",
+                            )
 
                     if frame[:2] != b"\x03\x00":
                         continue
@@ -4402,54 +4456,110 @@ async def functional_br_evo(addrs, auth_packet, key, iv, account_id,
                         continue
 
                     match_id = decoded[5].get(1)
-                    if udp_task and not udp_task.done():
-                        if match_id == current_match:
-                            continue            # একই ম্যাচের duplicate প্যাকেট
-                        udp_task.cancel()       # নতুন ম্যাচ পেয়েছি → পুরনো সেশন বাদ
+                    if match_id == current_match and match_found_this_session:
+                        continue
+
+                    # Enforce max concurrent live matches
+                    _prune_udp()
+                    if _live_count() >= MAX_LIVE:
+                        bot_state.log(
+                            f"[🐻 BR-EVO] Match found but at max {MAX_LIVE}/{MAX_LIVE} — skip join | UID: {uid_str}",
+                            "warning",
+                        )
+                        bot_state.set_info(
+                            uid_str,
+                            f"🐻 Max in-match {MAX_LIVE}/{MAX_LIVE} — skip new join",
+                        )
+                        continue
+
                     current_match = match_id
+                    match_found_this_session = True
+                    await _inc_match(uid_str)
                     bot_state.log(
-                        f"[🐻 BR-EVO #{loop_count}] MATCH FOUND → UDP join | UID: {uid_str} | match {match_id} | {decoded[5].get(2)}",
-                        "success"
+                        f"[🐻 BR-EVO #{loop_count}] MATCH FOUND → UDP join | UID: {uid_str} | match {match_id} | {decoded[5].get(2)} | live {_live_count()+1}/{MAX_LIVE}",
+                        "success",
                     )
-                    bot_state.set_info(uid_str, f"🐻 BR EVO ম্যাচ পাওয়া গেছে, জয়েন হচ্ছে... (#{loop_count})")
-                    udp_task = asyncio.create_task(_run_udp(decoded))
+                    bot_state.set_info(
+                        uid_str,
+                        f"🐻 Joining match... | In-Match {_live_count()+1}/{MAX_LIVE}",
+                    )
+
+                    t = asyncio.create_task(_run_udp(decoded, match_id))
+                    live_udp_tasks.add(t)
+                    t.add_done_callback(lambda fut: live_udp_tasks.discard(fut))
+                    await _push_status("IN_MATCH")
+
+                    # Wait 3s then close TCP only — UDP keeps playing
+                    await asyncio.sleep(TCP_CLOSE_AFTER_MATCH_SEC)
+                    close_tcp_after_match = True
+                    break
 
         except asyncio.CancelledError:
             bot_state.log(f"[🐻 BR-EVO] Worker cancelled | UID: {uid_str}", "warning")
-            for t in (udp_task, evo_task, hb_task):
+            for t in (evo_task, hb_task):
                 if t and not t.done():
                     t.cancel()
+            for t in list(live_udp_tasks):
+                if not t.done():
+                    t.cancel()
             if writer:
-                try: writer.close(); await writer.wait_closed()
-                except Exception: pass
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:
+                    pass
             raise
 
         except Exception as e:
             _es = str(e)
             if "BAN_DETECTED" in _es:
                 bot_state.log(f"[🐻 BR-EVO] BAN detected — stopping UID: {uid_str}", "error")
+                for t in list(live_udp_tasks):
+                    if not t.done():
+                        t.cancel()
                 return
             bot_state.log(f"[🐻 BR-EVO] Error ({uid_str}): {_es[:120]}", "warning")
         finally:
-            for t in (udp_task, evo_task, hb_task):
+            # Close TCP only — keep live_udp_tasks running
+            for t in (evo_task, hb_task):
                 if t and not t.done():
                     t.cancel()
                 if t:
-                    try: await t
-                    except (asyncio.CancelledError, Exception): pass
+                    try:
+                        await t
+                    except (asyncio.CancelledError, Exception):
+                        pass
             if writer:
-                try: writer.close(); await writer.wait_closed()
-                except Exception: pass
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:
+                    pass
             try:
-                bot_state.update_status(uid_str, "CONNECTING")
+                n = _live_count()
+                if n > 0:
+                    bot_state.update_status(uid_str, "IN_MATCH", n)
+                    bot_state.set_info(uid_str, f"🐻 In-Match: {n}/{MAX_LIVE} | TCP reconnecting")
+                elif match_found_this_session:
+                    bot_state.update_status(uid_str, "SEARCHING", 0)
+                else:
+                    bot_state.update_status(uid_str, "CONNECTING")
             except Exception:
                 pass
 
-        reconnects += 1
-        if reconnects > max_reconnects:
+        if match_found_this_session:
             reconnects = 0
-        delay = min(2 ** (reconnects - 1), 15) + random.uniform(0, 2.0)
-        bot_state.log(f"[🐻 BR-EVO] Reconnecting in {delay:.1f}s... | UID: {uid_str}", "info")
+            delay = random.uniform(0.8, 2.0)
+            bot_state.log(
+                f"[🐻 BR-EVO] TCP closed after match — reconnect {delay:.1f}s | UID: {uid_str} | live {_live_count()}/{MAX_LIVE}",
+                "info",
+            )
+        else:
+            reconnects += 1
+            if reconnects > max_reconnects:
+                reconnects = 0
+            delay = min(2 ** (reconnects - 1), 15) + random.uniform(0, 2.0)
+            bot_state.log(f"[🐻 BR-EVO] Reconnecting in {delay:.1f}s... | UID: {uid_str}", "info")
         await asyncio.sleep(delay)
 
 
