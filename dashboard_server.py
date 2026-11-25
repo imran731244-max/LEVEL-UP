@@ -93,6 +93,11 @@ sup{font-size:.52em;font-weight:700;vertical-align:super;line-height:0;margin-le
 .btn-primary{min-height:38px;padding:5px 14px;background:#d3d3d7;color:#101012;border:1px solid transparent;border-radius:15px;font-size:13.5px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;line-height:1.1;text-align:center;transition:background .2s var(--ease)}
 .btn-primary:hover{background:#e4e4e8}
 .btn-primary:disabled{opacity:.6;cursor:wait}
+/* Bulk Upload — blue-gray */
+.btn-bulk{min-height:38px;padding:5px 14px;background:#1a2330;color:#7ab4e8;border:1px solid #2a3d55;border-radius:15px;font-size:13.5px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;line-height:1.1;text-align:center;transition:background .2s var(--ease),border-color .2s var(--ease)}
+.btn-bulk:hover{background:#243044;border-color:#3a5470}
+.btn-bulk:disabled{opacity:.5;cursor:wait}
+.btn-bulk svg{width:15px;height:15px;flex:0 0 auto}
 /* Exit icon button — dark red */
 .btn-icon{width:38px;height:38px;flex:0 0 auto;display:grid;place-items:center;background:#1a0b0d;border:1px solid #3d1519;border-radius:15px;color:#ff4d4d;transition:background .2s var(--ease),border-color .2s var(--ease)}
 .btn-icon:hover{background:#2a1013;border-color:#6a2025}.btn-icon svg{width:17px;height:17px}
@@ -235,15 +240,14 @@ background-size:cover,100% 100%,cover;background-position:center;background-repe
 .log-msg{word-break:break-word;color:var(--text2)}.l-success{color:var(--green)}.l-warning{color:var(--amber)}.l-error{color:var(--red)}.l-info{color:var(--blue)}.l-tcp{color:#ff8c42;font-weight:600}
 .overlay{position:fixed;inset:0;z-index:200;display:none;place-items:center;padding:18px;background:rgba(0,0,0,.78);backdrop-filter:blur(10px)}
 .overlay.open{display:grid}
-.modal{width:min(480px,100%);max-height:100%;overflow-y:auto;background:var(--s1);border:1px solid var(--border2);border-radius:24px;padding:22px}
+.modal{width:min(420px,100%);max-height:100%;overflow-y:auto;background:var(--s1);border:1px solid var(--border2);border-radius:24px;padding:22px}
 .modal h2{font-size:19px;font-weight:800;margin-bottom:4px;color:var(--white);letter-spacing:.02em}
 .modal p{font-size:12px;color:var(--text2);margin-bottom:12px}
-.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:3px;background:#000;border:1px solid var(--border);border-radius:14px;margin-bottom:12px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:3px;background:#000;border:1px solid var(--border);border-radius:14px;margin-bottom:12px}
 .tab{height:34px;border:0;border-radius:11px;background:transparent;color:var(--text2);font-size:12px;font-weight:600;transition:background .2s var(--ease)}
 .tab.active{background:var(--s3);color:var(--white)}
 .field{margin-bottom:11px}.field label{display:block;font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;font-weight:700}
 .field .inp{width:100%;height:42px}
-.field textarea.inp{height:auto;min-height:110px;resize:vertical;font-family:var(--mono);font-size:11.5px;line-height:1.4;padding:10px 12px}
 .pane{display:none}.pane.active{display:block}
 .modal-foot{display:flex;gap:8px;margin-top:6px}.modal-foot button{flex:1;height:42px}
 .toasts{position:fixed;right:18px;bottom:18px;z-index:300;display:flex;flex-direction:column;gap:8px;pointer-events:none}
@@ -276,8 +280,8 @@ background-size:cover,100% 100%,cover;background-position:center;background-repe
 .brand-tail,.brand-sep{display:none}
 .header-right{gap:7px}
 .live span{display:none}.live{min-width:0}
-.btn-reload,.btn-primary{white-space:normal;padding:6px 11px;gap:7px;font-size:13px}
-.btn-reload .lbl,.btn-primary .lbl{display:block;max-width:3.9em;text-align:center;line-height:1.12}
+.btn-reload,.btn-primary,.btn-bulk{white-space:normal;padding:6px 11px;gap:7px;font-size:13px}
+.btn-reload .lbl,.btn-primary .lbl,.btn-bulk .lbl{display:block;max-width:3.9em;text-align:center;line-height:1.12}
 .rolechip{display:none}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -299,6 +303,11 @@ background-size:cover,100% 100%,cover;background-position:center;background-repe
       <span class="lbl">Reload JSON</span>
     </button>
     <button class="btn-primary" id="openAdd" type="button"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.5.5 0 01.5.5v5h5a.5.5 0 010 1h-5v5a.5.5 0 01-1 0v-5h-5a.5.5 0 010-1h5v-5A.5.5 0 018 2z"/></svg><span class="lbl">Add Bot</span></button>
+    <button class="btn-bulk" id="bulkUploadBtn" type="button" title="Bulk upload accounts JSON">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      <span class="lbl">Bulk Upload</span>
+    </button>
+    <input type="file" id="bulkFileInput" accept=".json,application/json" style="display:none">
     <button class="btn-icon" id="logoutBtn" type="button" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></button>
   </div>
 </header>
@@ -391,8 +400,8 @@ background-size:cover,100% 100%,cover;background-position:center;background-repe
 
 <div class="overlay" id="overlay">
   <div class="modal" role="dialog" aria-modal="true">
-    <h2>Add Account</h2><p>একটি আইডি যোগ করুন, অথবা ফাইল আপলোড করে একসাথে অনেক আইডি যোগ করুন।</p>
-    <div class="tabs"><button class="tab active" data-tab="guest" type="button">Guest</button><button class="tab" data-tab="token" type="button">Token</button><button class="tab" data-tab="bulk" type="button">Bulk Upload</button></div>
+    <h2>Add Account</h2><p>Connect a Free Fire account. It is validated before the bot starts.</p>
+    <div class="tabs"><button class="tab active" data-tab="guest" type="button">Guest Account</button><button class="tab" data-tab="token" type="button">Access Token</button></div>
     <div class="pane active" data-pane="guest">
       <div class="field"><label for="fUid">UID</label><input class="inp" id="fUid" inputmode="numeric" autocomplete="off" placeholder="Player UID"></div>
       <div class="field"><label for="fPwd">Password</label><input class="inp" id="fPwd" type="password" autocomplete="off" placeholder="Account password"></div>
@@ -400,17 +409,7 @@ background-size:cover,100% 100%,cover;background-position:center;background-repe
     <div class="pane" data-pane="token">
       <div class="field"><label for="fTok">Access Token</label><input class="inp" id="fTok" autocomplete="off" placeholder="Paste access token"></div>
     </div>
-    <div class="pane" data-pane="bulk">
-      <div class="field"><label for="fBulkFile">Upload accounts file (.json / .txt)</label>
-        <input class="inp" id="fBulkFile" type="file" accept=".json,.txt,.csv,application/json,text/plain" style="padding:8px;cursor:pointer">
-      </div>
-      <div class="field"><label for="fBulkText">Or paste accounts (one per line)</label>
-        <textarea class="inp" id="fBulkText" rows="6" placeholder="JSON: [{&quot;uid&quot;:&quot;123&quot;,&quot;password&quot;:&quot;pass&quot;}, ...]&#10;or lines:&#10;123456789:password&#10;987654321 password&#10;or one access token per line"></textarea>
-      </div>
-      <p class="hint" style="margin:0 0 8px;white-space:normal;opacity:.9">Supported: accounts.json array, uid:password / uid password lines, or one access token per line. After upload, accounts start <b>one by one every 2 seconds</b>.</p>
-      <div id="bulkPreview" style="font-size:11px;color:var(--text2);margin-bottom:6px;min-height:1.2em"></div>
-    </div>
-    <div class="field" id="regionField"><label for="fReg">Server Region</label>
+    <div class="field"><label for="fReg">Server Region</label>
       <select class="inp" id="fReg"><option value="BD">Bangladesh</option><option value="IND">India</option><option value="SG">Singapore</option><option value="ID">Indonesia</option><option value="BR">Brazil</option><option value="US">United States</option></select></div>
     <div class="modal-foot"><button class="btn-ghost" id="addCancel" type="button">Cancel</button><button class="btn-primary" id="addSubmit" type="button" style="justify-content:center">Validate &amp; Start</button></div>
   </div>
@@ -806,7 +805,7 @@ $('search').addEventListener('input',()=>{if(lastData)render(lastData)});
 $('ctrlToggle').addEventListener('click',()=>{const o=$('ctrlStack').classList.toggle('open');$('ctrlToggle').textContent='⚙ Controls '+(o?'▴':'▾')});
 
 function openAdd(){$('overlay').classList.add('open');setTimeout(()=>{(tab==='guest'?$('fUid'):$('fTok')).focus()},50)}
-function closeAdd(){$('overlay').classList.remove('open');['fUid','fPwd','fTok','fBulkText'].forEach(i=>{const el=$(i);if(el)el.value=''});const bf=$('fBulkFile');if(bf)bf.value='';const bp=$('bulkPreview');if(bp)bp.textContent=''}
+function closeAdd(){$('overlay').classList.remove('open');['fUid','fPwd','fTok'].forEach(i=>$(i).value='')}
 $('openAdd').addEventListener('click',openAdd);
 (function(){const mq=matchMedia('(min-width:901px)');const place=()=>{const l=$('logSec');if(mq.matches)$('ctrlStack').after(l);else document.querySelector('.main').appendChild(l)};place();mq.addEventListener('change',place)})();$('addCancel').addEventListener('click',closeAdd);
 $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeAdd()});
@@ -815,84 +814,49 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   tab=b.dataset.tab;
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));
   document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('active',p.dataset.pane===tab));
-  const rf=$('regionField'); if(rf) rf.style.display = tab==='bulk' ? 'none' : '';
-  const btn=$('addSubmit'); if(btn) btn.textContent = tab==='bulk' ? 'Upload & Start (2s gap)' : 'Validate & Start';
 }));
-
-function parseBulkText(raw){
-  const out=[];
-  if(!raw||!raw.trim()) return out;
-  const t=raw.trim();
-  if(t.startsWith('[')||t.startsWith('{')){
-    try{
-      let data=JSON.parse(t);
-      if(data&&typeof data==='object'&&!Array.isArray(data)){
-        data=data.accounts||data.data||data.list||[];
-      }
-      if(Array.isArray(data)){
-        for(const acc of data){
-          if(!acc||typeof acc!=='object') continue;
-          if(acc.token) out.push({token:String(acc.token).trim()});
-          else if(acc.uid&&acc.password) out.push({uid:String(acc.uid).trim(),password:String(acc.password).trim()});
-          else if(acc.UID&&acc.Password) out.push({uid:String(acc.UID).trim(),password:String(acc.Password).trim()});
-          else if(acc.user_id&&acc.password) out.push({uid:String(acc.user_id).trim(),password:String(acc.password).trim()});
-        }
-        return out;
-      }
-    }catch(e){}
-  }
-  for(const line of t.split(/\r?\n/)){
-    const s=line.trim();
-    if(!s||s.startsWith('#')||s.startsWith('//')) continue;
-    let m=s.match(/^(\d+)\s*[:|,\t]\s*(.+)$/);
-    if(m){ out.push({uid:m[1],password:m[2].trim()}); continue; }
-    m=s.match(/^(\d+)\s+(.+)$/);
-    if(m){ out.push({uid:m[1],password:m[2].trim()}); continue; }
-    if(s.length>40 && !/\s/.test(s)){ out.push({token:s}); continue; }
-  }
-  return out;
-}
-
-function updateBulkPreview(){
-  const el=$('bulkPreview'); if(!el) return;
-  const list=parseBulkText(($('fBulkText')&&$('fBulkText').value)||'');
-  if(!list.length){ el.textContent=''; return; }
-  const g=list.filter(a=>a.uid).length, tk=list.filter(a=>a.token).length;
-  el.textContent='Ready: '+list.length+' account(s)'+(g?' · '+g+' guest':'')+(tk?' · '+tk+' token':'');
-}
-
-$('fBulkFile')&&$('fBulkFile').addEventListener('change',async function(){
-  const f=this.files&&this.files[0]; if(!f) return;
-  try{
-    const text=await f.text();
-    if($('fBulkText')) $('fBulkText').value=text;
-    updateBulkPreview();
-    toast('File loaded: '+f.name+' ('+f.size+' bytes)');
-  }catch(e){toast('Could not read file: '+e.message,true)}
-});
-$('fBulkText')&&$('fBulkText').addEventListener('input',updateBulkPreview);
-
 $('addSubmit').addEventListener('click',async function(){
-  const region=$('fReg').value;
-  if(tab==='bulk'){
-    const accounts=parseBulkText(($('fBulkText')&&$('fBulkText').value)||'');
-    if(!accounts.length){toast('কোনো valid account পাওয়া যায়নি — JSON বা uid:password লাইন দিন',true);return}
-    this.disabled=true; this.textContent='Uploading '+accounts.length+'…';
-    try{
-      const res=await api('/api/accounts/bulk-add',{accounts,region,delay_seconds:2});
-      toast((res.message||('Added '+accounts.length+' accounts'))+(res.started!=null?' · starting with 2s gap':''));
-      closeAdd(); await fetchStats();
-    }catch(e){toast(e.message,true)}
-    this.disabled=false; this.textContent='Upload & Start (2s gap)';
-    return;
-  }
-  const p={type:tab,region};
+  const region=$('fReg').value,p={type:tab,region};
   if(tab==='guest'){p.uid=$('fUid').value.trim();p.password=$('fPwd').value.trim();if(!p.uid||!p.password){toast('UID এবং Password দিন',true);return}}
   else{p.token=$('fTok').value.trim();if(!p.token){toast('Access token দিন',true);return}}
   this.disabled=true;this.textContent='Validating…';
   try{await api('/api/account/add',p);toast('Account added — starting bot');closeAdd();await fetchStats()}
   catch(e){toast(e.message,true)}
   this.disabled=false;this.textContent='Validate & Start';
+});
+
+/* ── Bulk Upload: JSON array of {uid,password} ── */
+$('bulkUploadBtn').addEventListener('click',()=>$('bulkFileInput').click());
+$('bulkFileInput').addEventListener('change',async function(){
+  const file=this.files&&this.files[0];
+  this.value='';
+  if(!file)return;
+  const btn=$('bulkUploadBtn');
+  btn.disabled=true;
+  const oldLbl=btn.querySelector('.lbl')?btn.querySelector('.lbl').textContent:'Bulk Upload';
+  if(btn.querySelector('.lbl'))btn.querySelector('.lbl').textContent='Uploading…';
+  try{
+    const raw=await file.text();
+    let data;
+    try{data=JSON.parse(raw)}catch(e){throw new Error('Invalid JSON file')}
+    if(!Array.isArray(data))throw new Error('JSON must be an array: [ {uid,password}, ... ]');
+    if(!data.length)throw new Error('JSON array is empty');
+    const accounts=[];
+    for(let i=0;i<data.length;i++){
+      const row=data[i]||{};
+      const uid=String(row.uid||'').trim();
+      const password=String(row.password||'').trim();
+      if(!uid||!password)continue;
+      accounts.push({uid,password});
+    }
+    if(!accounts.length)throw new Error('No valid {uid,password} entries found');
+    const res=await api('/api/accounts/bulk-add',{accounts});
+    const added=res.added||0, skipped=res.skipped||0, failed=res.failed||0;
+    toast('Bulk: '+added+' added'+(skipped?', '+skipped+' skipped':'')+(failed?', '+failed+' failed':''));
+    await fetchStats();
+  }catch(e){toast(e.message||String(e),true)}
+  btn.disabled=false;
+  if(btn.querySelector('.lbl'))btn.querySelector('.lbl').textContent=oldLbl;
 });
 
 $('logoutBtn').addEventListener('click',async()=>{try{localStorage.removeItem('tfx_last')}catch(e){}try{await fetch('/api/logout',{method:'POST'})}catch(e){}location.href='/login'});
@@ -2290,11 +2254,7 @@ async def handle_add_account(request: web.Request) -> web.Response:
 
 
 async def handle_bulk_add_accounts(request: web.Request) -> web.Response:
-    """
-    Bulk add accounts from dashboard.
-    Body: { "accounts": [ {"uid","password"} | {"token"} , ... ], "region": "IND", "delay_seconds": 2 }
-    Saves all to accounts.json, then starts workers ONE BY ONE with delay (default 2s).
-    """
+    """Bulk add guest accounts from JSON array of uid/password objects."""
     try:
         data = await request.json()
         role = request.get("role", "admin")
@@ -2306,15 +2266,13 @@ async def handle_bulk_add_accounts(request: web.Request) -> web.Response:
                 owner = _secrets.token_hex(6)
                 new_owner_cookie = _owner_cookie_value(owner)
 
-        raw_list = data.get("accounts") or []
-        if not isinstance(raw_list, list) or not raw_list:
-            return web.json_response({"status": "error", "error": "accounts list required"}, status=400)
-
-        try:
-            delay = float(data.get("delay_seconds", 2) or 2)
-        except (TypeError, ValueError):
-            delay = 2.0
-        delay = max(0.5, min(30.0, delay))
+        accounts = data.get("accounts") if isinstance(data, dict) else data
+        if not isinstance(accounts, list):
+            return web.json_response({"status": "error", "error": "accounts must be a JSON array"}, status=400)
+        if not accounts:
+            return web.json_response({"status": "error", "error": "accounts array is empty"}, status=400)
+        if len(accounts) > 2000:
+            return web.json_response({"status": "error", "error": "Max 2000 accounts per upload"}, status=400)
 
         accounts_file = ACCOUNTS_FILE_PATH
         existing = []
@@ -2322,122 +2280,73 @@ async def handle_bulk_add_accounts(request: web.Request) -> web.Response:
             try:
                 with open(accounts_file, "r", encoding="utf-8") as f:
                     existing = json.load(f)
-                if not isinstance(existing, list):
-                    existing = []
             except Exception:
                 existing = []
+        if not isinstance(existing, list):
+            existing = []
 
-        existing_uids = {str(a.get("uid")) for a in existing if a.get("uid")}
-        existing_tokens = {str(a.get("token")) for a in existing if a.get("token")}
-
-        to_add = []
+        existing_uids = {str(a.get("uid", "")).strip() for a in existing if a.get("uid")}
+        added = 0
         skipped = 0
-        errors = []
+        failed = 0
+        launched = []
 
-        for i, acc in enumerate(raw_list):
-            if not isinstance(acc, dict):
+        for row in accounts:
+            if not isinstance(row, dict):
+                failed += 1
+                continue
+            uid = str(row.get("uid", "")).strip()
+            pwd = str(row.get("password", "")).strip()
+            if not uid or not pwd:
+                failed += 1
+                continue
+            if uid in existing_uids or uid in bot_state.accounts:
                 skipped += 1
                 continue
-            if acc.get("token"):
-                token = str(acc["token"]).strip()
-                if not token:
-                    skipped += 1
-                    continue
-                if token in existing_tokens:
-                    skipped += 1
-                    continue
-                owner_key = f"tok_{token[:10]}"
-                if role == "user":
-                    lim_err = _check_user_limit(role, owner, owner_key, existing + to_add)
-                    if lim_err:
-                        errors.append(f"limit: {lim_err}")
-                        break
-                to_add.append({"token": token})
-                existing_tokens.add(token)
-            elif acc.get("uid") and acc.get("password"):
-                uid = str(acc["uid"]).strip()
-                pwd = str(acc["password"]).strip()
-                if not uid or not pwd:
-                    skipped += 1
-                    continue
-                if uid in existing_uids:
-                    skipped += 1
-                    continue
-                if role == "user":
-                    lim_err = _check_user_limit(role, owner, uid, existing + to_add)
-                    if lim_err:
-                        errors.append(f"limit: {lim_err}")
-                        break
-                to_add.append({"uid": uid, "password": pwd})
-                existing_uids.add(uid)
-            else:
-                skipped += 1
+            lim_err = _check_user_limit(role, owner, uid, existing)
+            if lim_err:
+                failed += 1
+                break
+            existing.append({"uid": uid, "password": pwd})
+            existing_uids.add(uid)
+            bot_state.deleted_uids.discard(uid)
+            if role == "user" and owner:
+                bot_state.account_owner[uid] = owner
+            elif role == "admin":
+                bot_state.account_owner.pop(uid, None)
+            launched.append({"uid": uid, "password": pwd})
+            added += 1
 
-        if not to_add:
-            msg = "No new accounts to add"
-            if errors:
-                msg += " — " + errors[0]
-            elif skipped:
-                msg += f" ({skipped} skipped / already exist)"
-            return web.json_response({"status": "error", "error": msg}, status=400)
-
-        existing.extend(to_add)
-        try:
-            os.makedirs(os.path.dirname(accounts_file) or ".", exist_ok=True)
-        except Exception:
-            pass
-        with open(accounts_file, "w", encoding="utf-8") as f:
-            json.dump(existing, f, indent=2)
-
-        if role == "user" and owner:
-            for acc in to_add:
-                if acc.get("token"):
-                    bot_state.account_owner[f"tok_{acc['token'][:10]}"] = owner
-                elif acc.get("uid"):
-                    bot_state.account_owner[str(acc["uid"])] = owner
-            bot_state._save_owners()
-
-        for acc in to_add:
-            if acc.get("uid"):
-                bot_state.deleted_uids.discard(str(acc["uid"]))
-            if acc.get("token"):
-                bot_state.deleted_uids.discard(acc["token"][:10])
-                bot_state.deleted_uids.discard(f"tok_{acc['token'][:10]}")
         try:
             bot_state._save_deleted_uids()
         except Exception:
             pass
+        try:
+            bot_state._save_owners()
+        except Exception:
+            pass
+
+        tmp_file = accounts_file + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(existing, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_file, accounts_file)
+
+        cb = bot_state.refresh_callbacks.get("on_account_added")
+        if cb and launched:
+            for item in launched:
+                asyncio.create_task(cb(item))
 
         bot_state.log(
-            f"[BULK] {len(to_add)} account(s) saved — starting one-by-one every {delay:.0f}s"
-            + (f" ({skipped} skipped)" if skipped else ""),
-            "success",
+            f"[BULK] {added} added, {skipped} skipped, {failed} failed (from {len(accounts)} rows)",
+            "success" if added else "warning",
         )
-
-        async def _start_sequentially():
-            started = 0
-            for idx, acc in enumerate(to_add):
-                try:
-                    if "on_account_added" in bot_state.refresh_callbacks:
-                        await bot_state.refresh_callbacks["on_account_added"](acc)
-                        started += 1
-                    if idx < len(to_add) - 1:
-                        await asyncio.sleep(delay)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    bot_state.log(f"[BULK] start error: {e}", "error")
-                    await asyncio.sleep(delay)
-            bot_state.log(f"[BULK] Sequential start done — {started}/{len(to_add)} workers launched", "success")
-
-        asyncio.create_task(_start_sequentially())
 
         resp = web.json_response({
             "status": "ok",
-            "added": len(to_add),
+            "added": added,
             "skipped": skipped,
-            "delay_seconds": delay,
-            "message": f"{len(to_add)} account(s) added — logging in one by one every {delay:.0f}s",
+            "failed": failed,
+            "total": len(accounts),
         })
         if new_owner_cookie:
             resp.set_cookie(OWNER_COOKIE, new_owner_cookie, max_age=365 * 86400,
