@@ -686,7 +686,6 @@ function render(data){
   renderLogs(data.logs);
 }
 
-}
 function renderLogs(logs){
   logs=Array.isArray(logs)?logs:[];
   const last=logs[logs.length-1],sig=logs.length+'|'+(last?last.time+last.message:'');
