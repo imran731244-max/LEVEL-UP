@@ -160,6 +160,7 @@ sup{font-size:.52em;font-weight:700;vertical-align:super;line-height:0;margin-le
 .search-wrap{margin-bottom:12px}.search-wrap.hide{display:none}
 .search{width:100%;height:42px;border-radius:16px}
 .accounts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
+body.role-user #deleteAllBtn{display:none}.region-section{margin:0 0 18px}.region-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 9px;padding:8px 11px;background:var(--s1);border:1px solid var(--border);border-radius:12px;color:var(--text2);font-size:11px;font-weight:800;letter-spacing:.14em}.region-head b{color:var(--white);font-family:var(--mono)}
 /* ─── ACCOUNT CARD ─── */
 .acard{background:var(--s1);border:1px solid var(--border);border-radius:var(--rlg);padding:0;position:relative;overflow:hidden;container-type:inline-size;transition:border-color .25s var(--ease)}
 .acard:hover{border-color:var(--border2)}
@@ -360,6 +361,7 @@ background-size:cover,100% 100%,cover;background-position:center;background-repe
     </div>
     <button class="btn-block" id="reloadBtn" type="button">↺ Reload accounts.json</button>
     <button class="btn-block btn-restore" id="restoreBtn" type="button">♻ delete_accounts.json <span id="restoreCnt"></span></button>
+    <button class="btn-block" id="deleteAllBtn" type="button" style="margin-top:8px;background:#260d10;border-color:#70232b;color:#ff7777">✖ DELETE ALL · accounts*.json + data/</button>
     <div class="divider" style="margin:10px 0 6px"></div>
     <div class="slabel">Auto-Restart (6h Cycle)</div>
     <div class="row-between"><span class="row-label">Auto Restart</span><label class="tgl"><input type="checkbox" id="autoRestartToggle"><span class="tgl-track"></span></label></div>
@@ -600,24 +602,40 @@ function updateCard(el,a,limit){
 
 function render(data){
   const accs=Array.isArray(data.accounts)?data.accounts.slice():[];
-  // Highest level first; same level → UID order (EXP বদলালে কার্ড জায়গা বদলাবে না)
   accs.sort((a,b)=>num(b.level)-num(a.level)||String(a.uid).localeCompare(String(b.uid)));
-  const limit=num(data.exp_limit),grid=$('grid'),q=$('search').value.trim().toLowerCase();
-  const seen=new Set();let g={on:0,conn:0,off:0,pause:0,match:0};
-  accs.forEach((a,i)=>{
-    const uid=String(a.uid);seen.add(uid);
-    let el=cards.get(uid);if(!el){el=makeCard(uid);cards.set(uid,el)}
-    updateCard(el,a,limit);
-    const st_g=status(effStatus(a));g[st_g.g]++;
-    if(st_g.k==='match')g.match++;
-    el.hidden=!!q&&!el._search.includes(q);
-    if(grid.children[i]!==el)grid.insertBefore(el,grid.children[i]||null);   // keeps level order, moves only what changed
-  });
+  const limit=num(data.exp_limit),root=$('grid'),q=$('search').value.trim().toLowerCase();
+  const seen=new Set(),groups=new Map();
+  const regionNames={IND:'INDIA',BD:'BANGLADESH',SG:'SINGAPORE'};
+  const order=['IND','BD','SG'];
+  for(const a of accs){
+    const region=String(a.region||'BD').trim().toUpperCase()||'BD';
+    if(!groups.has(region))groups.set(region,[]);
+    groups.get(region).push(a);
+  }
+  for(const r of groups.keys())if(!order.includes(r))order.push(r);
+  root.replaceChildren();
+  let g={on:0,conn:0,off:0,pause:0,match:0},shown=0;
+  for(const region of order){
+    const list=groups.get(region);if(!list||!list.length)continue;
+    const section=document.createElement('section');section.className='region-section';
+    const head=document.createElement('div');head.className='region-head';
+    const title=document.createElement('span');title.textContent=regionNames[region]||region;
+    const count=document.createElement('b');count.textContent=String(list.length)+' ACCOUNTS';
+    head.append(title,count);
+    const grid=document.createElement('div');grid.className='accounts-grid';
+    section.append(head,grid);root.appendChild(section);
+    for(const a of list){
+      const uid=String(a.uid);seen.add(uid);
+      let el=cards.get(uid);if(!el){el=makeCard(uid);cards.set(uid,el)}
+      updateCard(el,a,limit);
+      const st_g=status(effStatus(a));g[st_g.g]++;if(st_g.k==='match')g.match++;
+      el.hidden=!!q&&!el._search.includes(q);if(!el.hidden)shown++;
+      grid.appendChild(el);
+    }
+  }
   cards.forEach((el,uid)=>{if(!seen.has(uid)){el.remove();cards.delete(uid)}});
-  let emp=grid.querySelector('.empty');
-  if(!accs.length){if(!emp){emp=document.createElement('div');emp.className='empty';emp.textContent='No bots connected. Add a Free Fire account to start.';grid.appendChild(emp)}}else if(emp)emp.remove();
-  const shown=q?accs.filter(a=>(String(a.nickname||'')+' '+a.uid).toLowerCase().includes(q)).length:accs.length;
-  if(q){$('countTxt').textContent=shown+' / '+accs.length}else{$('countTxt').innerHTML='<span style="color:var(--green);font-weight:800">● '+g.on+'</span><span style="color:var(--muted)"> Online / '+accs.length+' Total</span>'}
+  if(!accs.length){const emp=document.createElement('div');emp.className='empty';emp.textContent='No bots connected. Add a Free Fire account to start.';root.appendChild(emp)}
+  $('countTxt').innerHTML=q?shown+' / '+accs.length:'<span style="color:var(--green);font-weight:800">● '+g.on+'</span><span style="color:var(--muted)"> Online / '+accs.length+' Total</span>';
   $('searchWrap').classList.toggle('hide',accs.length<=3&&!q);
   $('totalExp').textContent=fmt(data.total_gained_exp);
   $('totalMatches').textContent=fmt(data.total_matches);
@@ -668,6 +686,7 @@ function render(data){
   renderLogs(data.logs);
 }
 
+}
 function renderLogs(logs){
   logs=Array.isArray(logs)?logs:[];
   const last=logs[logs.length-1],sig=logs.length+'|'+(last?last.time+last.message:'');
@@ -782,6 +801,15 @@ async function doRestoreDeleted(btn){
   btn.disabled=false;btn.innerHTML=old;
 }
 $('restoreBtn').addEventListener('click',function(){doRestoreDeleted(this)});
+$('deleteAllBtn').addEventListener('click',async function(){
+  const phrase=prompt('This permanently removes every accounts*.json file and the entire data/ folder. Type DELETE ALL to continue:');
+  if(phrase!=='DELETE ALL')return;
+  if(!confirm('Final confirmation: stop all account workers and erase all account files plus data/?'))return;
+  const btn=this;btn.disabled=true;const old=btn.textContent;btn.textContent='Deleting…';
+  try{const d=await api('/api/accounts/delete-all',{confirmation:'DELETE ALL'});resetDashboard();toast(d.message||'All account files and data folder deleted');await fetchStats()}
+  catch(e){toast(e.message||String(e),true)}
+  finally{btn.disabled=false;btn.textContent=old}
+});
 if($('headerReloadBtn'))$('headerReloadBtn').addEventListener('click',function(){doReload(this)});
 $('logClear').addEventListener('click',async()=>{try{await api('/api/logs/clear');lastLogSig='';await fetchStats()}catch(e){toast(e.message,true)}});
 // ── Auto-Restart listeners ──
@@ -2420,6 +2448,73 @@ async def handle_delete_account(request: web.Request) -> web.Response:
         return web.json_response({"status": "error", "error": str(e)})
 
 
+async def handle_delete_all_accounts(request: web.Request) -> web.Response:
+    """Admin-only destructive cleanup: stop workers, remove accounts*.json and data/."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if payload.get("confirmation") != "DELETE ALL":
+        return web.json_response({"status": "error", "error": "Confirmation required"}, status=400)
+    try:
+        # Stop workers before touching files/state.
+        tasks = list({id(t): t for t in bot_state.account_workers.values() if t and not t.done()}.values())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        bot_state.account_workers.clear()
+
+        # Remove all account source files (accounts.json, accounts2.json, ...).
+        removed_files = []
+        for path in _glob.glob(os.path.join(BASE_DIR, "accounts*.json")):
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+                    removed_files.append(os.path.basename(path))
+            except OSError as exc:
+                raise RuntimeError(f"Could not remove {os.path.basename(path)}: {exc}") from exc
+
+        # Remove runtime data directory (token cache, device profiles, etc.).
+        data_dir = os.path.join(BASE_DIR, "data")
+        if os.path.isdir(data_dir):
+            import shutil
+            shutil.rmtree(data_dir)
+
+        # Clear in-memory account state so workers/snapshots cannot resurrect entries.
+        bot_state.accounts.clear()
+        bot_state.account_credentials.clear()
+        bot_state.match_types.clear()
+        bot_state.guest_alias.clear()
+        bot_state.account_owner.clear()
+        bot_state._save_owners()
+        bot_state.deleted_uids.clear()
+        bot_state._save_deleted_uids()
+        # Also clear app.py's in-memory device cache when the bot module is loaded.
+        import sys as _sys
+        _app_module = _sys.modules.get("app")
+        if _app_module is not None:
+            if hasattr(_app_module, "_DEVICES_MEMORY_CACHE"):
+                _app_module._DEVICES_MEMORY_CACHE.clear()
+            if hasattr(_app_module, "_DEVICES_CACHE_LOADED"):
+                _app_module._DEVICES_CACHE_LOADED = False
+        bot_state.auto_delete_queue.clear()
+        bot_state.level_remove_queue.clear()
+        bot_state.recalc_totals()
+
+        # Invalidate cached dashboard snapshots.
+        _STATS_CACHE.clear()
+        _REBUILDING.clear()
+        bot_state.log("ADMIN: all account JSON files and data/ directory were deleted.", "warning")
+        return web.json_response({
+            "status": "ok",
+            "removed_files": removed_files,
+            "message": f"Deleted {len(removed_files)} account file(s) and the data/ folder."
+        })
+    except Exception as exc:
+        return web.json_response({"status": "error", "error": str(exc)}, status=500)
+
+
 async def handle_refresh_account(request: web.Request) -> web.Response:
     try:
         data = await request.json()
@@ -2846,6 +2941,7 @@ async def start_web_dashboard(host: str = "0.0.0.0", port: int = 5000):
     app.router.add_post("/api/account/add", handle_add_account)
     app.router.add_post("/api/accounts/bulk-add", handle_bulk_add_accounts)
     app.router.add_post("/api/account/delete", handle_delete_account)
+    app.router.add_post("/api/accounts/delete-all", handle_delete_all_accounts)
     app.router.add_post("/api/account/refresh", handle_refresh_account)
     app.router.add_post("/api/accounts/reload", handle_reload_accounts)
     app.router.add_post("/api/accounts/restore-deleted", handle_restore_deleted)
